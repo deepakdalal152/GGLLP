@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="app.diagrams.net" modified="2025-10-10T00:00:00.000Z" agent="ChatGPT" version="22.0.5">
+  <diagram id="vfx_pipeline_architecture" name="VFX Pipeline Architecture">
+    <mxGraphModel dx="1280" dy="720" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2000" pageHeight="1200">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        
+        <!-- Remote and Local Artists -->
+        <mxCell id="remote_artists" value="Remote Artists / DCCs&#xa;(Maya, Nuke, Blender)" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="100" y="900" width="250" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="local_artists" value="Local Artists / Workstations" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="100" y="750" width="250" height="100" as="geometry"/>
+        </mxCell>
+        
+        <!-- Kerio Control -->
+        <mxCell id="kerio_control" value="Kerio Control&#xa;(VPN / Firewall)" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="400" y="820" width="250" height="100" as="geometry"/>
+        </mxCell>
+        
+        <!-- Keycloak -->
+        <mxCell id="keycloak" value="Keycloak&#xa;(SSO / OIDC)" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="700" y="900" width="250" height="100" as="geometry"/>
+        </mxCell>
+        
+        <!-- AYON -->
+        <mxCell id="ayon" value="AYON&#xa;(Pipeline Core)" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="400" y="600" width="250" height="100" as="geometry"/>
+        </mxCell>
+        
+        <!-- Kitsu -->
+        <mxCell id="kitsu" value="Kitsu&#xa;(Production Tracking + Review)" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="700" y="600" width="250" height="100" as="geometry"/>
+        </mxCell>
+        
+        <!-- Horilla HRMS -->
+        <mxCell id="horilla" value="Horilla HRMS&#xa;(HR / Payroll / Availability)" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="1000" y="600" width="250" height="100" as="geometry"/>
+        </mxCell>
+        
+        <!-- Kerio Connect -->
+        <mxCell id="kerio_connect" value="Kerio Connect&#xa;(Email / Archive)" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="1000" y="900" width="250" height="100" as="geometry"/>
+        </mxCell>
+        
+        <!-- OpenCue -->
+        <mxCell id="opencue" value="OpenCue&#xa;(Render Management)" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="700" y="350" width="250" height="100" as="geometry"/>
+        </mxCell>
+        
+        <!-- Storage -->
+        <mxCell id="storage" value="Storage / NAS / S3" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="400" y="350" width="250" height="100" as="geometry"/>
+        </mxCell>
+        
+        <!-- Databases -->
+        <mxCell id="databases" value="Databases&#xa;(MongoDB, PostgreSQL, HR DB)" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="1000" y="350" width="250" height="100" as="geometry"/>
+        </mxCell>
+        
+        <!-- Connections -->
+        <mxCell id="vpn_arrow" style="edgeStyle=orthogonalEdgeStyle;endArrow=classic;html=1;" edge="1" source="remote_artists" target="kerio_control" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint x="0" y="0" as="targetPoint"/></mxGeometry>
+        </mxCell>
+        <mxCell id="kerio_to_ayon" style="edgeStyle=orthogonalEdgeStyle;endArrow=classic;html=1;" edge="1" source="kerio_control" target="ayon" parent="1"/>
+        <mxCell id="kerio_to_kitsu" style="edgeStyle=orthogonalEdgeStyle;endArrow=classic;html=1;" edge="1" source="kerio_control" target="kitsu" parent="1"/>
+        <mxCell id="kerio_to_keycloak" style="edgeStyle=orthogonalEdgeStyle;endArrow=classic;html=1;" edge="1" source="kerio_control" target="keycloak" parent="1"/>
+        <mxCell id="keycloak_to_ayon" style="edgeStyle=orthogonalEdgeStyle;endArrow=classic;html=1;" edge="1" source="keycloak" target="ayon" parent="1"/>
+        <mxCell id="keycloak_to_kitsu" style="edgeStyle=orthogonalEdgeStyle;endArrow=classic;html=1;" edge="1" source="keycloak" target="kitsu" parent="1"/>
+        <mxCell id="keycloak_to_horilla" style="edgeStyle=orthogonalEdgeStyle;endArrow=classic;html=1;" edge="1" source="keycloak" target="horilla" parent="1"/>
+        <mxCell id="ayon_to_kitsu" style="edgeStyle=orthogonalEdgeStyle;endArrow=classic;html=1;" edge="1" source="ayon" target="kitsu" parent="1"/>
+        <mxCell id="ayon_to_storage" style="edgeStyle=orthogonalEdgeStyle;endArrow=classic;html=1;" edge="1" source="ayon" target="storage" parent="1"/>
+        <mxCell id="ayon_to_opencue" style="edgeStyle=orthogonalEdgeStyle;endArrow=classic;html=1;" edge="1" source="ayon" target="opencue" parent="1"/>
+        <mxCell id="opencue_to_databases" style="edgeStyle=orthogonalEdgeStyle;endArrow=classic;html=1;" edge="1" source="opencue" target="databases" parent="1"/>
+        <mxCell id="horilla_to_databases" style="edgeStyle=orthogonalEdgeStyle;endArrow=classic;html=1;" edge="1" source="horilla" target="databases" parent="1"/>
+        <mxCell id="ayon_to_kerio_connect" style="edgeStyle=orthogonalEdgeStyle;endArrow=classic;html=1;" edge="1" source="ayon" target="kerio_connect" parent="1"/>
+        <mxCell id="kitsu_to_kerio_connect" style="edgeStyle=orthogonalEdgeStyle;endArrow=classic;html=1;" edge="1" source="kitsu" target="kerio_connect" parent="1"/>
+        
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

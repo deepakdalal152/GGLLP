@@ -1,0 +1,99 @@
+version: "3.9"
+
+services:
+  mariadb:
+    image: mariadb:10.8
+    container_name: frappe_mariadb
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    networks:
+      - default
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin -u${MYSQL_USER} -p${MYSQL_PASSWORD} ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:alpine
+    container_name: frappe_redis
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    networks:
+      - default
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD} ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  frappe:
+    image: frappe/bench:latest
+    container_name: frappe_bench
+    command: bash /workspace/init.sh
+    environment:
+      SHELL: /bin/bash
+      NVM_DIR: /home/frappe/.nvm
+      NODE_VERSION_DEVELOP: ${NODE_VERSION_DEVELOP}
+      FRAPPE_SITE_NAME: ${FRAPPE_SITE_NAME}
+      FRAPPE_ENV: ${FRAPPE_ENV}
+      FRAPPE_ADMIN_PASSWORD: ${FRAPPE_ADMIN_PASSWORD}
+      MYSQL_HOST: mariadb
+      REDIS_HOST: redis
+    volumes:
+      - .:/workspace
+    working_dir: /home/frappe
+    ports:
+      - "8001:8000"
+      - "9001:9000"
+    depends_on:
+      - mariadb
+      - redis
+    networks:
+      - default
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frappe.rule=Host(`ggllp.frappe.local`)"
+      - "traefik.http.routers.frappe.entrypoints=web"
+      - "traefik.http.services.frappe.loadbalancer.server.port=8000"
+
+  erpnext:
+    image: frappe/bench:latest
+    container_name: frappe_erpnext
+    command: bash /workspace/init.sh
+    environment:
+      SHELL: /bin/bash
+      FRAPPE_SITE_NAME: ${FRAPPE_SITE_NAME}
+      FRAPPE_ENV: ${FRAPPE_ENV}
+      FRAPPE_ADMIN_PASSWORD: ${FRAPPE_ADMIN_PASSWORD}
+      MYSQL_HOST: mariadb
+      REDIS_HOST: redis
+    volumes:
+      - .:/workspace
+    working_dir: /home/frappe
+    depends_on:
+      - mariadb
+      - redis
+    networks:
+      - default
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.erpnext.rule=Host(`erpnext.local`)"
+      - "traefik.http.routers.erpnext.entrypoints=web"
+      - "traefik.http.services.erpnext.loadbalancer.server.port=8000"
+
+volumes:
+  mariadb-data:
+  redis-data:
+
+networks:
+  default:
+    external: true
+    name: ${NETWORK_NAME}
