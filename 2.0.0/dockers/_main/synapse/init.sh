@@ -40,11 +40,6 @@ docker compose up -d synapse_db
 # done
 # echo "✅ Postgres ready."
 
-
-# sudo mkdir -p ./data
-# sudo chown -R 991:991 ./data
-
-
 # Generate Synapse configuration if missing
 if [ ! -f "$BASE_DIR/data/homeserver.yaml" ]; then
   echo "🔧 Generating Synapse configuration..."
@@ -86,6 +81,13 @@ EOF
 else
   echo "✅ Synapse configuration already exists — skipping generation."
 fi
+
+
+# Ensure Synapse data directory has correct ownership
+echo "🔒 Ensuring correct permissions for Synapse data directory..."
+# sudo mkdir -p ./data
+sudo chown -R 991:991 ./data
+
 
 # Start Synapse
 echo "🚀 Starting Synapse service..."
