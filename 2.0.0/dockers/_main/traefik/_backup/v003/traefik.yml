@@ -1,0 +1,13 @@
+api:
+  dashboard: true
+  insecure: true  # Allows access without authentication (useful for testing)
+
+entryPoints:
+  web:
+    address: ":80"  # Changed to port 80 for web traffic
+  dashboard:
+    address: ":8082"  # Keep the dashboard on port 8082
+
+providers:
+  docker:
+    exposedByDefault: false  # Only expose services explicitly with labels

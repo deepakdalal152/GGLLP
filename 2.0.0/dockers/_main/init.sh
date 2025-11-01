@@ -65,6 +65,6 @@ echo "────────────────────────�
 echo " ✅ All stacks processed"
 echo " Access:"
 echo "  • Pi-hole   → http://$HOST_IP:8081/admin/"
-echo "  • Traefik   → http://$HOST_IP:8080/dashboard/"
+echo "  • Traefik   → http://$HOST_IP:8082/dashboard/"
 echo "  • Authentik → http://ggllp.authentik.local/"
 echo "───────────────────────────────────────────────"

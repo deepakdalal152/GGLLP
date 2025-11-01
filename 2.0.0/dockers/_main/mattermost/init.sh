@@ -22,8 +22,17 @@ if [ -f "$LOCAL_ENV" ]; then
   set +a
 fi
 
-echo "→ Starting Traefik..."
+
+# Create the necessary directories with the -p flag to ensure parent directories are created
+mkdir -p ./volumes/app/mattermost/{config,data,logs,plugins,client/plugins,bleve-indexes}
+
+# Set the appropriate ownership (UID 2000 and GID 2000) for the directories
+sudo chown -R 2000:2000 ./volumes/app/mattermost
+
+
+
+echo "→ Starting Mattermost..."
 # uses top-level network (create by init-all if needed)
 # docker compose pull
 docker compose up -d
-echo "→ Traefik started (dashboard: http://$HOST_IP:8082/dashboard/)"
+echo "→ Mattermost started (dashboard: http://$HOST_IP:8065/)"

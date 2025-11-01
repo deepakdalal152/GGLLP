@@ -6,3 +6,5 @@
 172.168.20.3 ggllp.frappe.local
 172.168.20.3 ggllp.jumserver.local
 172.168.20.3 ggllp.passbolt.local
+172.168.20.3 ggllp.synapse.local
+172.168.20.3 ggllp.mattermost.local

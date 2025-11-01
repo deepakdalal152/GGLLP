@@ -1,3 +1,4 @@
+version: '3.8'
 
 services:
   kitsu:
@@ -17,10 +18,12 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.kitsu.rule=Host(`ggllp.kitsu.local`)"
+      - "traefik.http.routers.kitsu.entrypoints=web"
       - "traefik.http.services.kitsu.loadbalancer.server.port=80"
 
+
   zou-app:
-    container_name: cgwire_zou-app
+    container_name: cgwire_zou_app
     image: ghcr.io/emberlightvfx/zou-for-docker:latest
     depends_on:
       - db
@@ -36,7 +39,7 @@ services:
       sh -c "/init_zou.sh && /upgrade_zou.sh && gunicorn --error-logfile - --access-logfile - -w 3 -k gevent -b :5000 zou.app:app"
 
   zou-event:
-    container_name: cgwire_zou-event
+    container_name: cgwire_zou_event
     image: ghcr.io/emberlightvfx/zou-for-docker:latest
     depends_on:
       - redis
@@ -47,12 +50,12 @@ services:
       - .env
     restart: unless-stopped
     networks:
-      - cgwire
+      - default
     command: >
       sh -c "gunicorn --error-logfile - --access-logfile - -w 1 -k geventwebsocket.gunicorn.workers.GeventWebSocketWorker -b :5001 zou.event_stream:app"
 
   zou-jobs:
-    container_name: cgwire_zou-jobs
+    container_name: cgwire_zou_jobs
     image: ghcr.io/emberlightvfx/zou-for-docker:latest
     volumes:
       - 'previews:/opt/zou/previews'
@@ -61,7 +64,7 @@ services:
       - .env
     restart: unless-stopped
     networks:
-      - cgwire
+      - default
     command: >
       sh -c "rq worker -c zou.job_settings"
 
@@ -76,11 +79,11 @@ services:
       - .env
     restart: unless-stopped
     networks:
-      - cgwire
+      - default
 
   db:
-    container_name: cgwire_db-12
-    image: postgres:12-alpine
+    container_name: cgwire_db_16
+    image: postgres:16-alpine
     volumes:
       - 'db:/var/lib/postgresql/data'
       - ./db/pg_ctl.conf:/etc/postgresql/12/main/pg_ctl.conf:ro
@@ -88,7 +91,7 @@ services:
       - .env
     restart: unless-stopped
     networks:
-      - cgwire
+      - default
 
   redis:
     container_name: cgwire_redis
@@ -97,11 +100,11 @@ services:
       - 'redis:/data'
     restart: unless-stopped
     networks:
-      - cgwire
+      - default
 
 volumes:
   db:
-    name: zou-db-12
+    name: zou_db_16
   redis:
     name: cgwire_redis
   meili_data:
@@ -117,4 +120,3 @@ networks:
   default:
     external: true
     name: ${NETWORK_NAME}
- 
