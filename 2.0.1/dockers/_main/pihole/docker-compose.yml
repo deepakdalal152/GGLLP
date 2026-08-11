@@ -1,0 +1,36 @@
+version: "3.9"
+services:
+  pihole:
+    image: pihole/pihole:latest
+    container_name: pihole
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ}
+      FTLCONF_webserver_api_password: "admin"
+      FTLCONF_dns_listeningMode: "all"
+      FTLCONF_dns_upstreams: "8.8.8.8;1.1.1.1"
+    # TODO:Volume disable due to access right now we copying data to "/opt/pihole/etc-pihole" and accessing it
+    # Below are the steps to perform it 
+    # sudo mkdir -p /opt/pihole/etc-pihole
+    # sudo cp -a ./etc-pihole/. /opt/pihole/etc-pihole/
+    # volumes:
+    #   - /opt/pihole/etc-pihole:/etc/pihole:Z
+    #   - ./custom.list:/etc/pihole/custom.list:Z
+    # For Direct access we need to figureout a way for this or switch on below if we are  copying it to rocky and accessing it
+    volumes:
+      - ./etc-pihole:/etc/pihole
+      - ./custom.list:/etc/pihole/custom.list
+
+    ports:
+      - "53:53/tcp"
+      - "53:53/udp"
+      - "8081:80/tcp"
+    cap_add:
+      - NET_ADMIN
+    networks:
+      - default
+
+networks:
+  default:
+    external: true
+    name: ${NETWORK_NAME}

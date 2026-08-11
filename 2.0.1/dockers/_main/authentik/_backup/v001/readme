@@ -1,0 +1,9 @@
+# Authentik stack (local)
+
+Place these files under: /opt/ggllp-infra/authentik/
+
+## Quick start
+
+1. Make scripts executable:
+   ```bash
+   chmod +x /opt/ggllp-infra/authentik/init.sh

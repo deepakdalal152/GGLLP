@@ -1,0 +1,344 @@
+version: "3.9"
+services:
+
+  # ==========================================================
+  # MariaDB
+  # ==========================================================
+
+  mariadb:
+    image: mariadb:10.11
+    container_name: frappe_mariadb
+    restart: unless-stopped
+
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --skip-character-set-client-handshake
+
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MARIADB_DATABASE: ${MYSQL_DATABASE}
+      MARIADB_USER: ${MYSQL_USER}
+      MARIADB_PASSWORD: ${MYSQL_PASSWORD}
+
+    volumes:
+      - mariadb-data:/var/lib/mysql
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "healthcheck.sh",
+          "--connect",
+          "--innodb_initialized"
+        ]
+      start_period: 10s
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+    networks:
+      - default
+
+
+  # ==========================================================
+  # Redis Cache
+  # ==========================================================
+
+  redis-cache:
+    image: redis:7-alpine
+    container_name: frappe_redis_cache
+    restart: unless-stopped
+
+    networks:
+      - default
+
+
+  # ==========================================================
+  # Redis Queue
+  # ==========================================================
+
+  redis-queue:
+    image: redis:7-alpine
+    container_name: frappe_redis_queue
+    restart: unless-stopped
+
+    volumes:
+      - redis-data:/data
+
+    networks:
+      - default
+
+
+  # ==========================================================
+  # Configurator
+  # ==========================================================
+
+  configurator:
+    image: ${CUSTOM_IMAGE}:${CUSTOM_TAG}
+    container_name: frappe_configurator
+    restart: "no"
+
+    entrypoint:
+      - bash
+      - -c
+
+    command:
+      - >
+        ls -1 apps > sites/apps.txt;
+        bench set-config -g db_host "$${DB_HOST}";
+        bench set-config -gp db_port "$${DB_PORT}";
+        bench set-config -g redis_cache "redis://$${REDIS_CACHE}";
+        bench set-config -g redis_queue "redis://$${REDIS_QUEUE}";
+        bench set-config -g redis_socketio "redis://$${REDIS_QUEUE}";
+        bench set-config -gp socketio_port "$${SOCKETIO_PORT}";
+        bench set-config -g chromium_path /usr/bin/chromium-headless-shell;
+
+    environment:
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      REDIS_CACHE: ${REDIS_CACHE}
+      REDIS_QUEUE: ${REDIS_QUEUE}
+      SOCKETIO_PORT: ${SOCKETIO_PORT}
+
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+
+    depends_on:
+      mariadb:
+        condition: service_healthy
+
+      redis-cache:
+        condition: service_started
+
+      redis-queue:
+        condition: service_started
+
+    networks:
+      - default
+
+
+  # ==========================================================
+  # Backend
+  # ==========================================================
+
+  backend:
+    image: ${CUSTOM_IMAGE}:${CUSTOM_TAG}
+    container_name: frappe_backend
+    restart: unless-stopped
+
+    environment:
+      SHELL: /bin/bash
+
+      SITE_NAME: ${SITE_NAME}
+      FRAPPE_ENV: ${FRAPPE_ENV}
+      FRAPPE_DEVELOPER_MODE: ${FRAPPE_DEVELOPER_MODE}
+
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+
+      REDIS_CACHE: ${REDIS_CACHE}
+      REDIS_QUEUE: ${REDIS_QUEUE}
+
+      GUNICORN_THREADS: ${GUNICORN_THREADS}
+      GUNICORN_WORKERS: ${GUNICORN_WORKERS}
+      GUNICORN_TIMEOUT: ${GUNICORN_TIMEOUT}
+
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+
+    networks:
+      - default
+
+
+  # ==========================================================
+  # Frontend / Nginx
+  # ==========================================================
+
+  frontend:
+    image: ${CUSTOM_IMAGE}:${CUSTOM_TAG}
+    container_name: frappe_frontend
+    restart: unless-stopped
+
+    command:
+      - nginx-entrypoint.sh
+
+    environment:
+      BACKEND: backend:8000
+      SOCKETIO: websocket:9000
+
+      FRAPPE_SITE_NAME_HEADER: ${FRAPPE_SITE_NAME_HEADER}
+
+      UPSTREAM_REAL_IP_ADDRESS: ${UPSTREAM_REAL_IP_ADDRESS}
+      UPSTREAM_REAL_IP_HEADER: ${UPSTREAM_REAL_IP_HEADER}
+      UPSTREAM_REAL_IP_RECURSIVE: ${UPSTREAM_REAL_IP_RECURSIVE}
+
+      PROXY_READ_TIMEOUT: ${PROXY_READ_TIMEOUT}
+      CLIENT_MAX_BODY_SIZE: ${CLIENT_MAX_BODY_SIZE}
+
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+
+    ports:
+      - "8001:8080"
+
+    depends_on:
+      - backend
+      - websocket
+
+    networks:
+      - default
+
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frappe.rule=Host(`ggllp.frappe.local`)"
+      - "traefik.http.routers.frappe.entrypoints=web"
+      - "traefik.http.services.frappe.loadbalancer.server.port=8080"
+
+
+  # ==========================================================
+  # WebSocket
+  # ==========================================================
+
+  websocket:
+    image: ${CUSTOM_IMAGE}:${CUSTOM_TAG}
+    container_name: frappe_websocket
+    restart: unless-stopped
+
+    command:
+      - node
+      - /home/frappe/frappe-bench/apps/frappe/socketio.js
+
+    environment:
+      REDIS_CACHE: ${REDIS_CACHE}
+      REDIS_QUEUE: ${REDIS_QUEUE}
+
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+
+    networks:
+      - default
+
+
+  # ==========================================================
+  # Short Queue
+  # ==========================================================
+
+  queue-short:
+    image: ${CUSTOM_IMAGE}:${CUSTOM_TAG}
+    container_name: frappe_queue_short
+    restart: unless-stopped
+
+    command:
+      - bench
+      - worker
+      - --queue
+      - short,default
+
+    environment:
+      REDIS_CACHE: ${REDIS_CACHE}
+      REDIS_QUEUE: ${REDIS_QUEUE}
+
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+
+    networks:
+      - default
+
+
+  # ==========================================================
+  # Long Queue
+  # ==========================================================
+
+  queue-long:
+    image: ${CUSTOM_IMAGE}:${CUSTOM_TAG}
+    container_name: frappe_queue_long
+    restart: unless-stopped
+
+    command:
+      - bench
+      - worker
+      - --queue
+      - long,default,short
+
+    environment:
+      REDIS_CACHE: ${REDIS_CACHE}
+      REDIS_QUEUE: ${REDIS_QUEUE}
+
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+
+    networks:
+      - default
+
+
+  # ==========================================================
+  # Scheduler
+  # ==========================================================
+
+  scheduler:
+    image: ${CUSTOM_IMAGE}:${CUSTOM_TAG}
+    container_name: frappe_scheduler
+    restart: unless-stopped
+
+    command:
+      - bench
+      - schedule
+
+    environment:
+      REDIS_CACHE: ${REDIS_CACHE}
+      REDIS_QUEUE: ${REDIS_QUEUE}
+
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+
+    networks:
+      - default
+
+
+# ============================================================
+# Volumes
+# ============================================================
+
+volumes:
+
+  mariadb-data:
+    name: frappe_mariadb_data
+
+  redis-data:
+    name: frappe_redis_data
+
+  sites:
+    name: frappe_sites
+
+
+# ============================================================
+# Network
+# ============================================================
+
+networks:
+
+  default:
+    external: true
+    name: ${NETWORK_NAME}
+

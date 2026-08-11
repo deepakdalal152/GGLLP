@@ -1,0 +1,104 @@
+version: "3.9"
+
+services:
+  passbolt_db:
+    image: mariadb:10.11
+    container_name: passbolt_db
+    restart: unless-stopped
+
+    environment:
+      MYSQL_RANDOM_ROOT_PASSWORD: "true"
+      MYSQL_DATABASE: ${PASSBOLT_DB_DATABASE}
+      MYSQL_USER: ${PASSBOLT_DB_USER}
+      MYSQL_PASSWORD: ${PASSBOLT_DB_PASSWORD}
+
+    volumes:
+      - passbolt_database:/var/lib/mysql
+
+    networks:
+      - default
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mysqladmin ping -h localhost -u${PASSBOLT_DB_USER} -p${PASSBOLT_DB_PASSWORD} --silent"
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  passbolt:
+    image: passbolt/passbolt:${PASSBOLT_VERSION:-latest-ce}
+    container_name: passbolt_server
+    restart: unless-stopped
+
+    depends_on:
+      passbolt_db:
+        condition: service_healthy
+
+    environment:
+      APP_FULL_BASE_URL: ${PASSBOLT_URL}
+
+      DATASOURCES_DEFAULT_HOST: passbolt_db
+      DATASOURCES_DEFAULT_USERNAME: ${PASSBOLT_DB_USER}
+      DATASOURCES_DEFAULT_PASSWORD: ${PASSBOLT_DB_PASSWORD}
+      DATASOURCES_DEFAULT_DATABASE: ${PASSBOLT_DB_DATABASE}
+
+      # Email
+      EMAIL_DEFAULT_FROM_NAME: ${PASSBOLT_EMAIL_FROM_NAME}
+      EMAIL_DEFAULT_FROM: ${PASSBOLT_EMAIL_FROM}
+      EMAIL_TRANSPORT_DEFAULT_HOST: ${SMTP_HOST}
+      EMAIL_TRANSPORT_DEFAULT_PORT: ${SMTP_PORT}
+      EMAIL_TRANSPORT_DEFAULT_USERNAME: ${SMTP_USER}
+      EMAIL_TRANSPORT_DEFAULT_PASSWORD: ${SMTP_PASSWORD}
+      EMAIL_TRANSPORT_DEFAULT_TLS: ${SMTP_TLS}
+
+    volumes:
+      - passbolt_gpg:/etc/passbolt/gpg
+      - passbolt_jwt:/etc/passbolt/jwt
+
+    command:
+      [
+        "/usr/bin/wait-for.sh",
+        "-t",
+        "0",
+        "passbolt_db:3306",
+        "--",
+        "/docker-entrypoint.sh"
+      ]
+
+    ports:
+      - "8085:80"
+      - "443:443"
+
+    networks:
+      - default
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS http://localhost/healthcheck/status.json || exit 1"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.passbolt.rule=Host(`${PASSBOLT_DOMAIN}`)"
+      - "traefik.http.routers.passbolt.entrypoints=websecure"
+      - "traefik.http.services.passbolt.loadbalancer.server.port=80"
+
+volumes:
+  passbolt_database:
+  passbolt_gpg:
+  passbolt_jwt:
+
+networks:
+  default:
+    external: true
+    name: ${NETWORK_NAME}

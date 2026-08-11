@@ -1,0 +1,15 @@
+{
+    "users": [
+        {
+            "name": "admin",
+            "password": "admin",
+            "fullName": "Ayon admin",
+            "isAdmin": true
+        },
+        {
+            "name": "service",
+            "apiKey": "veryinsecurapikey",
+            "isService": true
+        }
+    ]
+}

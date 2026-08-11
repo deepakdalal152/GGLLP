@@ -1,0 +1,4 @@
+general:herot,alice,bob
+admins:herot,admin
+moderators:herot,alice
+developers:bob,herot

@@ -1,0 +1,16 @@
+url: http://localhost:8008
+as_token: syt_aGVybw_DNrXgVQBhVdRPPEOoAAQ_2GFiM2   # Replace this with your Application Service token
+hs_token: syt_aGVybw_DNrXgVQBhVdRPPEOoAAQ_2GFiM2   # Replace this with your Homeserver token
+id: rc2matrix
+sender_localpart: rc2matrix
+
+namespaces:
+  users:  # List of users you're interested in
+    - exclusive: false
+      regex: ".*"
+  aliases:
+    - exclusive: false
+      regex: ".*"
+  rooms:
+    - exclusive: false
+      regex: ".*"

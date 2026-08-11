@@ -1,0 +1,41 @@
+version: "3.9"
+services:
+  synapse_db:
+    image: postgres:15-alpine
+    container_name: synapse_db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./postgres:/var/lib/postgresql/data
+    networks:
+      - ${NETWORK_NAME}
+
+  synapse:
+    image: matrixdotorg/synapse:latest
+    container_name: synapse
+    restart: unless-stopped
+    volumes:
+      - ./data:/data
+    depends_on:
+      - synapse_db
+    environment:
+      SYNAPSE_SERVER_NAME: ${SYNAPSE_SERVER_NAME}
+      SYNAPSE_REPORT_STATS: ${SYNAPSE_REPORT_STATS}
+      # Postgres env — Synapse image will read PG settings from these if used in its entry scripts,
+      # otherwise Synapse configuration will need to be updated to use postgres.
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_HOST: synapse_db
+    networks:
+      - ${NETWORK_NAME}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.synapse.rule=Host(`ggllp.synapse.local`)"
+      - "traefik.http.services.synapse.loadbalancer.server.port=8008"
+
+networks:
+  ${NETWORK_NAME}:
+    external: true
