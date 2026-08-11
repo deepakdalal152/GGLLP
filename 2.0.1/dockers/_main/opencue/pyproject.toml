@@ -1,9 +1,0 @@
-[tool.pyright]
-venvPath = "."
-venv = "venv"
-
-[tool.coverage.report]
-omit = [
-    "shibokensupport/*",
-    "signature_bootstrap.py"
-]
