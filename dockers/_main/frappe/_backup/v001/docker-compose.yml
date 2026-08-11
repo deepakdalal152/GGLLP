@@ -1,0 +1,290 @@
+version: "3.9"
+
+services:
+  mariadb:
+    image: mariadb:10.11
+    container_name: frappe_mariadb
+    restart: unless-stopped
+
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --skip-character-set-client-handshake
+
+    environment:
+      # MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      # MYSQL_DATABASE: ${MYSQL_DATABASE}
+      # MYSQL_USER: ${MYSQL_USER}
+      # MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MARIADB_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MARIADB_DATABASE: ${MYSQL_DATABASE}
+      MARIADB_USER: ${MYSQL_USER}
+      MARIADB_PASSWORD: ${MYSQL_PASSWORD}
+
+    volumes:
+      - mariadb-data:/var/lib/mysql
+
+    networks:
+      - default
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "healthcheck.sh",
+          "--connect",
+          "--innodb_initialized"
+        ]
+      start_period: 10s
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+
+  redis-cache:
+    image: redis:alpine
+    container_name: frappe_redis_cache
+    restart: unless-stopped
+
+    networks:
+      - default
+
+
+  redis-queue:
+    image: redis:alpine
+    container_name: frappe_redis_queue
+    restart: unless-stopped
+
+    volumes:
+      - redis-data:/data
+
+    networks:
+      - default
+
+
+  configurator:
+    image: frappe/erpnext:latest
+    container_name: frappe_configurator
+    restart: "no"
+
+    entrypoint:
+      - bash
+      - -c
+
+    command:
+      - >
+        ls -1 apps > sites/apps.txt;
+        bench set-config -g db_host "$${DB_HOST}";
+        bench set-config -gp db_port "$${DB_PORT}";
+        bench set-config -g redis_cache "redis://$${REDIS_CACHE}";
+        bench set-config -g redis_queue "redis://$${REDIS_QUEUE}";
+        bench set-config -g redis_socketio "redis://$${REDIS_QUEUE}";
+        bench set-config -gp socketio_port "$${SOCKETIO_PORT}";
+
+    environment:
+      DB_HOST: mariadb
+      DB_PORT: 3306
+      REDIS_CACHE: redis-cache:6379
+      REDIS_QUEUE: redis-queue:6379
+      SOCKETIO_PORT: 9000
+
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis-cache:
+        condition: service_started
+      redis-queue:
+        condition: service_started
+
+    networks:
+      - default
+
+
+  backend:
+    image: frappe/erpnext:latest
+    container_name: frappe_backend
+    restart: unless-stopped
+
+    environment:
+      SHELL: /bin/bash
+      SITE_NAME: ${SITE_NAME}
+      FRAPPE_ENV: ${FRAPPE_ENV}
+      FRAPPE_ADMIN_PASSWORD: ${FRAPPE_ADMIN_PASSWORD}
+
+      DB_HOST: mariadb
+      DB_PORT: 3306
+
+      REDIS_CACHE: redis-cache:6379
+      REDIS_QUEUE: redis-queue:6379
+
+      GUNICORN_THREADS: 4
+      GUNICORN_WORKERS: 2
+      GUNICORN_TIMEOUT: 120
+
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+
+    networks:
+      - default
+
+
+  frontend:
+    image: frappe/erpnext:latest
+    container_name: frappe_frontend
+    restart: unless-stopped
+
+    command:
+      - nginx-entrypoint.sh
+
+    environment:
+      BACKEND: backend:8000
+      SOCKETIO: websocket:9000
+
+      SITE_NAME: ${SITE_NAME:-$${host}}
+
+      UPSTREAM_REAL_IP_ADDRESS: 127.0.0.1
+      UPSTREAM_REAL_IP_HEADER: X-Forwarded-For
+      UPSTREAM_REAL_IP_RECURSIVE: "off"
+
+      PROXY_READ_TIMEOUT: 120
+      CLIENT_MAX_BODY_SIZE: 50m
+
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+
+    ports:
+      - "8001:8080"
+
+    depends_on:
+      - backend
+      - websocket
+
+    networks:
+      - default
+
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frappe.rule=Host(`ggllp.frappe.local`)"
+      - "traefik.http.routers.frappe.entrypoints=web"
+      - "traefik.http.services.frappe.loadbalancer.server.port=8080"
+
+
+  websocket:
+    image: frappe/erpnext:latest
+    container_name: frappe_websocket
+    restart: unless-stopped
+
+    command:
+      - node
+      - /home/frappe/frappe-bench/apps/frappe/socketio.js
+
+    environment:
+      REDIS_CACHE: redis-cache:6379
+      REDIS_QUEUE: redis-queue:6379
+
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+
+    networks:
+      - default
+
+
+  queue-short:
+    image: frappe/erpnext:latest
+    container_name: frappe_queue_short
+    restart: unless-stopped
+
+    command:
+      - bench
+      - worker
+      - --queue
+      - short,default
+
+    environment:
+      REDIS_CACHE: redis-cache:6379
+      REDIS_QUEUE: redis-queue:6379
+
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+
+    networks:
+      - default
+
+
+  queue-long:
+    image: frappe/erpnext:latest
+    container_name: frappe_queue_long
+    restart: unless-stopped
+
+    command:
+      - bench
+      - worker
+      - --queue
+      - long,default,short
+
+    environment:
+      REDIS_CACHE: redis-cache:6379
+      REDIS_QUEUE: redis-queue:6379
+
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+
+    networks:
+      - default
+
+
+  scheduler:
+    image: frappe/erpnext:latest
+    container_name: frappe_scheduler
+    restart: unless-stopped
+
+    command:
+      - bench
+      - schedule
+
+    environment:
+      REDIS_CACHE: redis-cache:6379
+      REDIS_QUEUE: redis-queue:6379
+
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+
+    networks:
+      - default
+
+
+volumes:
+  mariadb-data:
+  redis-data:
+  sites:
+
+
+networks:
+
+  default:
+    external: true
+    name: ${NETWORK_NAME}
+

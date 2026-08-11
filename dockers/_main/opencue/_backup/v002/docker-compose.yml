@@ -1,0 +1,120 @@
+services:
+  db:
+    image: postgres:15.1
+    container_name: opencue_postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=cuebot
+      - POSTGRES_PASSWORD=cuebot_password
+      - POSTGRES_DB=cuebot
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./sandbox/db-data:/var/lib/postgresql/data
+    networks:
+      - default
+
+  flyway:
+    build:
+      context: ./
+      dockerfile: ./sandbox/flyway.Dockerfile
+    links:
+      - db
+    depends_on:
+      - db
+    environment:
+      - PGUSER=cuebot
+      - PGPASSWORD=cuebot_password
+      - PGDATABASE=cuebot
+      - PGHOST=db
+      - PGPORT=5432
+    command: /opt/scripts/migrate.sh
+
+  cuebot:
+    image: opencue/cuebot
+    container_name: opencue_cuebot
+    links:
+      - db
+    ports:
+      - "8443:8443"
+    depends_on:
+      db:
+        condition: service_started
+      flyway:
+        condition: service_completed_successfully
+    restart: always
+    networks:
+      - default
+    environment:
+      - CUE_FRAME_LOG_DIR=/tmp/rqd/logs
+    command: --datasource.cue-data-source.jdbc-url=jdbc:postgresql://db/cuebot --datasource.cue-data-source.username=cuebot --datasource.cue-data-source.password=cuebot_password
+
+
+  rqd:
+    image: opencue/rqd
+    container_name: opencue_rqd
+    restart: always
+    environment:
+      - PYTHONUNBUFFERED=1
+      - CUEBOT_HOSTNAME=cuebot
+    depends_on:
+      cuebot:
+        condition: service_healthy
+    links:
+      - cuebot
+    ports:
+      - "8444:8444"
+    networks:
+      - default
+
+    volumes:
+      - /tmp/rqd/logs:/tmp/rqd/logs
+      - /tmp/rqd/shots:/tmp/rqd/shots
+
+
+
+  # cuegui:
+  #   image: opencue/cuegui
+  #   container_name: opencue_cuegui
+  #   restart: unless-stopped
+  #   depends_on:
+  #     - cuebot
+  #   environment:
+  #     - CUEBOT_HOSTNAME=cuebot
+  #   ports:
+  #     - "8000:8000"  # Adjust this port as needed
+  #   # labels:
+  #   #   - "traefik.enable=true"
+  #   #   - "traefik.http.routers.cuegui.rule=Host(`ggllp.cuegui.local`)"
+  #   #   - "traefik.http.services.cuegui.loadbalancer.server.port=8000"  # The port exposed by the GUI
+  #   # volumes:
+  #   #   - ./data:/data  # If you want to persist data
+  #   networks:
+  #     - default
+
+
+
+  # cueadmin:
+  #   image: opencue/cueadmin
+  #   container_name: opencue_cueadmin
+  #   restart: unless-stopped
+  #   depends_on:
+  #     - cuebot
+  #   environment:
+  #     - CUEBOT_HOSTNAME=cuebot
+  #   ports:
+  #     - "7999:8000"  # Adjust this port as needed
+  #   labels:
+  #     - "traefik.enable=true"
+  #     - "traefik.http.routers.cuegui.rule=Host(`ggllp.cuegui.local`)"
+  #     - "traefik.http.services.cuegui.loadbalancer.server.port=8000"  # The port exposed by the GUI
+  #   volumes:
+  #     - ./data:/data  # If you want to persist data
+  #   networks:
+  #     - default
+
+
+networks:
+  default:
+    external: true
+    name: ${NETWORK_NAME}

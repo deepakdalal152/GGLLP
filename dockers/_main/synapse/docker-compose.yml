@@ -1,0 +1,74 @@
+version: "3.9"
+
+services:
+  synapse_db:
+    image: postgres:16-alpine
+    container_name: synapse_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      LANG: en_US.utf8
+      LC_COLLATE: en_US.utf8
+      LC_CTYPE: en_US.utf8
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - default
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  synapse:
+    image: matrixdotorg/synapse:latest
+    container_name: synapse_server
+    restart: unless-stopped
+    depends_on:
+      synapse_db:
+        condition: service_healthy
+    environment:
+      SYNAPSE_SERVER_NAME: ${SYNAPSE_SERVER_NAME}
+      SYNAPSE_REPORT_STATS: ${SYNAPSE_REPORT_STATS}
+      SYNAPSE_ENABLE_REGISTRATION: "true"
+      SYNAPSE_NO_TLS: "true"
+      SYNAPSE_CONFIG_DIR: /data
+      SYNAPSE_DATA_DIR: /data
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_HOST: synapse_db
+    volumes:
+      - ./data:/data
+      - ./migration:/migration
+      # - ./homeserver.yaml:/data/homeserver.yaml:ro
+    networks:
+      - default
+    ports:
+      - "8008:8008"  # local access
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.synapse.rule=Host(`ggllp.synapse.local`)"
+      - "traefik.http.routers.synapse.entrypoints=web"
+      - "traefik.http.services.synapse.loadbalancer.server.port=8008"
+
+
+  synapse-admin:
+    container_name: synapse_admin
+    image: awesometechnologies/synapse-admin:0.10.3@sha256:70a6e988af1b4acc2f3c0dea8c2eebc27a9ecbe638a472540104625326c5e259
+    ports:
+      - '9080:80'
+    restart: 'no'
+
+
+
+volumes:
+  postgres-data:
+
+networks:
+  default:
+    external: true
+    name: ${NETWORK_NAME}
+ 

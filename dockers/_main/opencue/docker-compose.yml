@@ -1,0 +1,124 @@
+version: "3.8"
+
+services:
+  db:
+    image: postgres:15.1
+    container_name: opencue_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: cuebot
+      POSTGRES_PASSWORD: cuebot_password
+      POSTGRES_DB: cuebot
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - default
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cuebot -d cuebot || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  flyway:
+    build:
+      context: ./
+      dockerfile: ./sandbox/flyway.Dockerfile
+    container_name: opencue_flyway
+    depends_on:
+      - db
+    environment:
+      PGUSER: cuebot
+      PGPASSWORD: cuebot_password
+      PGDATABASE: cuebot
+      PGHOST: db
+      PGPORT: 5432
+    command: /opt/scripts/migrate.sh
+    restart: "no"
+    networks:
+      - default
+
+  cuebot:
+    image: opencue/cuebot
+    container_name: opencue_cuebot
+    restart: always
+    depends_on:
+      - db
+      - flyway
+    ports:
+      - "8443:8443"
+    environment:
+      CUE_FRAME_LOG_DIR: /tmp/rqd/logs
+      # datasource args passed via command below
+    command:
+      - --datasource.cue-data-source.jdbc-url=jdbc:postgresql://db/cuebot
+      - --datasource.cue-data-source.username=cuebot
+      - --datasource.cue-data-source.password=cuebot_password
+    networks:
+      - default
+
+  rqd:
+    image: opencue/rqd
+    container_name: opencue_rqd
+    restart: always
+    environment:
+      PYTHONUNBUFFERED: "1"
+      CUEBOT_HOSTNAME: cuebot
+    depends_on:
+      - cuebot
+    ports:
+      - "8444:8444"
+    networks:
+      - default
+    volumes:
+      - /tmp/rqd/logs:/tmp/rqd/logs
+      - /tmp/rqd/shots:/tmp/rqd/shots
+
+  gateway:
+    build:
+      context: ./
+      dockerfile: ./rest_gateway/Dockerfile
+    container_name: opencue_gateway
+    restart: unless-stopped
+    depends_on:
+      - cuebot
+    environment:
+      CUEBOT_ENDPOINT: cuebot:8443
+      LOG_LEVEL: info
+      CORS_ALLOWED_ORIGINS: "*"
+      REST_PORT: "8448"
+    ports:
+      - "8448:8448"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.gateway.rule=Host(`ggllp.cuewebgateway.local`)"
+      - "traefik.http.services.gateway.loadbalancer.server.port=8448"
+    networks:
+      - default
+
+  cueweb:
+    build: ./cueweb
+    container_name: opencue_cueweb
+    restart: unless-stopped
+    depends_on:
+      - gateway
+    environment:
+      CUEBOT_HOSTNAME: cuebot
+    ports:
+      - "3000:3000"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.cueweb.rule=Host(`ggllp.cueweb.local`)"
+      - "traefik.http.services.cueweb.loadbalancer.server.port=3000"
+    networks:
+      - default
+
+volumes:
+  postgres_data:
+    name: opencue_db_data
+
+networks:
+  default:
+    external: true
+    name: ${NETWORK_NAME}

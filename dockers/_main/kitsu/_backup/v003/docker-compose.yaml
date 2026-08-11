@@ -1,0 +1,136 @@
+version: '3.8'
+
+services:
+  kitsu:
+    container_name: cgwire_kitsu
+    image: ghcr.io/emberlightvfx/kitsu-for-docker:latest
+    depends_on:
+      - zou-app
+      - zou-event
+      - zou-jobs
+    ports:
+      - '8800:80'
+    env_file:
+      - .env
+    restart: unless-stopped
+    networks:
+      - default
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.kitsu.rule=Host(`ggllp.kitsu.local`)"
+      - "traefik.http.routers.kitsu.entrypoints=web"
+      - "traefik.http.services.kitsu.loadbalancer.server.port=80"
+
+
+  zou-app:
+    container_name: cgwire_zou_app
+    image: ghcr.io/emberlightvfx/zou-for-docker:latest
+    depends_on:
+      - db
+    volumes:
+      - 'previews:/opt/zou/previews'
+      - 'tmp:/tmp/zou'
+    env_file:
+      - .env
+    restart: unless-stopped
+    networks:
+      - default
+    command: >
+      sh -c "/init_zou.sh && /upgrade_zou.sh && gunicorn --error-logfile - --access-logfile - -w 3 -k gevent -b :5000 zou.app:app"
+
+  zou-event:
+    container_name: cgwire_zou_event
+    image: ghcr.io/emberlightvfx/zou-for-docker:latest
+    depends_on:
+      - redis
+    volumes:
+      - 'previews:/opt/zou/previews'
+      - 'tmp:/tmp/zou'
+    env_file:
+      - .env
+    restart: unless-stopped
+    networks:
+      - default
+    command: >
+      sh -c "gunicorn --error-logfile - --access-logfile - -w 1 -k geventwebsocket.gunicorn.workers.GeventWebSocketWorker -b :5001 zou.event_stream:app"
+
+  zou-jobs:
+    container_name: cgwire_zou_jobs
+    image: ghcr.io/emberlightvfx/zou-for-docker:latest
+    volumes:
+      - 'previews:/opt/zou/previews'
+      - 'tmp:/tmp/zou'
+    env_file:
+      - .env
+    restart: unless-stopped
+    networks:
+      - default
+    command: >
+      sh -c "rq worker -c zou.job_settings"
+
+  meilisearch:
+    container_name: cgwire_meilisearch
+    image: getmeili/meilisearch:v1.3.1
+    ports:
+      - "7700:7700"
+    volumes:
+      - 'meili_data:/meili_data'
+    env_file:
+      - .env
+    restart: unless-stopped
+    networks:
+      - default
+
+  db:
+    container_name: cgwire_db_16
+    image: postgres:16-alpine
+    volumes:
+      - 'db:/var/lib/postgresql/data'
+      - ./db/pg_ctl.conf:/etc/postgresql/12/main/pg_ctl.conf:ro
+    env_file:
+      - .env
+    restart: unless-stopped
+    networks:
+      - default
+
+  redis:
+    container_name: cgwire_redis
+    image: redis:alpine
+    volumes:
+      - 'redis:/data'
+    restart: unless-stopped
+    networks:
+      - default
+
+  worker:
+    image: ynput/ayon-ash:latest
+    container_name: ayon_worker_01
+    hostname: worker-01
+    restart: unless-stopped
+    network_mode: host  # This binds the container to the host network
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"  # Allow the container to control Docker on the host
+    env_file:
+      - .env  # This loads environment variables from the .env file
+    # networks:
+    #   - default
+
+
+volumes:
+  db:
+    name: zou_db_16
+  redis:
+    name: cgwire_redis
+  meili_data:
+    name: cgwire_meili_data
+  previews:
+    name: cgwire_previews
+  tmp:
+    name: cgwire_tmp
+  kitsu:
+    name: cgwire_kitsu
+
+networks:
+  default:
+    external: true
+    name: ${NETWORK_NAME}
